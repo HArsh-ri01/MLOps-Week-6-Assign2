@@ -121,7 +121,7 @@ jobs:
           requirements.txt
           Dockerfile
 
-  # Stage 3: Build and Push Docker Image
+    # Stage 3: Build and Push Docker Image
   build-push-docker:
     needs: build-test-api
     runs-on: ubuntu-latest
@@ -135,11 +135,15 @@ jobs:
       with:
         name: api-code
 
+    - name: Decode GCP credentials
+      run: |
+        echo "${{ secrets.GCP_SA_KEY }}" | base64 --decode > "${{ github.workspace }}/gcp-key.json"
+
     - name: Setup Cloud SDK
       uses: google-github-actions/setup-gcloud@v1
       with:
         project_id: ${{ secrets.GCP_PROJECT_ID }}
-        service_account_key: ${{ secrets.GCP_SA_KEY }}
+        service_account_key: ${{ github.workspace }}/gcp-key.json
         export_default_credentials: true
 
     - name: Configure Docker for Artifact Registry
@@ -165,11 +169,15 @@ jobs:
     - name: Checkout code
       uses: actions/checkout@v3
 
+    - name: Decode GCP credentials
+      run: |
+        echo "${{ secrets.GCP_SA_KEY }}" | base64 --decode > "${{ github.workspace }}/gcp-key.json"
+
     - name: Setup Cloud SDK
       uses: google-github-actions/setup-gcloud@v1
       with:
         project_id: ${{ secrets.GCP_PROJECT_ID }}
-        service_account_key: ${{ secrets.GCP_SA_KEY }}
+        service_account_key: ${{ github.workspace }}/gcp-key.json
         export_default_credentials: true
 
     - name: Get GKE Credentials
@@ -178,14 +186,9 @@ jobs:
 
     - name: Deploy to Kubernetes
       run: |
-        # Replace image in deployment manifest
         sed -i "s|IMAGE_URL|${{ env.ARTIFACT_REGISTRY }}/${{ env.PROJECT_ID }}/ml-models/${{ env.IMAGE }}:${{ github.sha }}|g" k8s/deployment.yaml
-        
-        # Apply Kubernetes manifests
         kubectl apply -f k8s/deployment.yaml
         kubectl apply -f k8s/service.yaml
-        
-        # Wait for rollout to complete
         kubectl rollout status deployment/${{ env.DEPLOYMENT_NAME }}
 
     - name: Get Service Details
@@ -209,11 +212,15 @@ jobs:
     - name: Checkout code
       uses: actions/checkout@v3
 
+    - name: Decode GCP credentials
+      run: |
+        echo "${{ secrets.GCP_SA_KEY }}" | base64 --decode > "${{ github.workspace }}/gcp-key.json"
+
     - name: Setup Cloud SDK
       uses: google-github-actions/setup-gcloud@v1
       with:
         project_id: ${{ secrets.GCP_PROJECT_ID }}
-        service_account_key: ${{ secrets.GCP_SA_KEY }}
+        service_account_key: ${{ github.workspace }}/gcp-key.json
         export_default_credentials: true
 
     - name: Get GKE Credentials
@@ -226,27 +233,18 @@ jobs:
 
     - name: Run Integration Tests
       run: |
-        # Get external IP
         EXTERNAL_IP=$(kubectl get service iris-api-service -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
-        
-        # Wait for external IP to be assigned
         while [ -z "$EXTERNAL_IP" ]; do
           echo "Waiting for external IP..."
           sleep 10
           EXTERNAL_IP=$(kubectl get service iris-api-service -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
         done
-        
         echo "Testing API at: http://$EXTERNAL_IP:8200"
-        
-        # Test health endpoint
         curl -f http://$EXTERNAL_IP:8200/ || exit 1
-        
-        # Test prediction endpoint
         curl -X POST "http://$EXTERNAL_IP:8200/predict/" \
           -H "Content-Type: application/json" \
           -d '{"sepal_length": 5.1, "sepal_width": 3.5, "petal_length": 1.4, "petal_width": 0.2}' \
           | grep -q "predicted_class" || exit 1
-        
         echo "✅ All integration tests passed!"
 
     - name: Setup CML for Deployment Report
@@ -257,7 +255,6 @@ jobs:
         REPO_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       run: |
         EXTERNAL_IP=$(kubectl get service iris-api-service -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
-        
         echo "## 🚀 Deployment Successful!" >> deployment_report.md
         echo "" >> deployment_report.md
         echo "### Deployment Details" >> deployment_report.md
@@ -269,5 +266,6 @@ jobs:
         echo "### Test Results" >> deployment_report.md
         echo "✅ Health check: PASSED" >> deployment_report.md
         echo "✅ Prediction API: PASSED" >> deployment_report.md
-        
         cml comment create deployment_report.md
+
+
