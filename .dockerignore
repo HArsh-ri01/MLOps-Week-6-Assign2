@@ -1,0 +1,11 @@
+# .dockerignore
+**/__pycache__
+**/.pytest_cache
+**/.git
+**/.gitignore
+**/*.md
+**/tests
+**/.*
+!requirements.txt
+!iris_fastapi.py
+!model.joblib

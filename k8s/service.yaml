@@ -1,0 +1,20 @@
+# k8s/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: iris-api-service
+  labels:
+    app: iris-api
+  annotations:
+    cloud.google.com/load-balancer-type: "External"
+spec:
+  type: LoadBalancer
+  ports:
+  - port: 80
+    targetPort: 8200
+    protocol: TCP
+    name: http
+  selector:
+    app: iris-api
+  # Session affinity for consistent routing (optional)
+  sessionAffinity: None
