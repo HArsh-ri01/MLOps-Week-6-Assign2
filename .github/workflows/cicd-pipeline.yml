@@ -173,17 +173,30 @@ jobs:
       with:
         credentials_json: ${{ secrets.GCP_SA_KEY }}
 
-    - name: Setup Cloud SDK and GKE Auth Plugin
+    - name: Setup Cloud SDK and required components
       uses: google-github-actions/setup-gcloud@v2
       with:
         project_id: ${{ secrets.GCP_PROJECT_ID }}
         components: 'gke-gcloud-auth-plugin, kubectl'
+
+    - name: Debug PATH and executables
+      run: |
+        echo "---- System PATH ----"
+        echo "$PATH"
+        echo "---- Location of gcloud ----"
+        which gcloud
+        echo "---- Location of kubectl ----"
+        which kubectl
+        echo "---- Location of gke-gcloud-auth-plugin ----"
+        which gke-gcloud-auth-plugin
 
     - name: Get GKE Credentials
       run: |
         gcloud container clusters get-credentials ${{ env.GKE_CLUSTER }} --zone ${{ env.GKE_ZONE }}
 
     - name: Deploy to Kubernetes
+      env:
+        USE_GKE_GCLOUD_AUTH_PLUGIN: "True"
       run: |
         sed -i "s|IMAGE_URL|${{ env.ARTIFACT_REGISTRY }}/${{ env.PROJECT_ID }}/ml-models/${{ env.IMAGE }}:${{ github.sha }}|g" k8s/deployment.yaml
         kubectl apply -f k8s/deployment.yaml
@@ -216,13 +229,15 @@ jobs:
       with:
         credentials_json: ${{ secrets.GCP_SA_KEY }}
 
-    - name: Setup Cloud SDK and GKE Auth Plugin
+    - name: Setup Cloud SDK and required components
       uses: google-github-actions/setup-gcloud@v2
       with:
         project_id: ${{ secrets.GCP_PROJECT_ID }}
         components: 'gke-gcloud-auth-plugin, kubectl'
 
     - name: Get GKE Credentials
+      env:
+        USE_GKE_GCLOUD_AUTH_PLUGIN: "True"
       run: |
         gcloud container clusters get-credentials ${{ env.GKE_CLUSTER }} --zone ${{ env.GKE_ZONE }}
 
