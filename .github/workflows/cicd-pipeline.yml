@@ -177,7 +177,7 @@ jobs:
       uses: google-github-actions/setup-gcloud@v2
       with:
         project_id: ${{ secrets.GCP_PROJECT_ID }}
-        components: 'gke-gcloud-auth-plugin'
+        components: 'gke-gcloud-auth-plugin, kubectl'
 
     - name: Get GKE Credentials
       run: |
@@ -216,10 +216,11 @@ jobs:
       with:
         credentials_json: ${{ secrets.GCP_SA_KEY }}
 
-    - name: Setup Cloud SDK
+    - name: Setup Cloud SDK and GKE Auth Plugin
       uses: google-github-actions/setup-gcloud@v2
       with:
         project_id: ${{ secrets.GCP_PROJECT_ID }}
+        components: 'gke-gcloud-auth-plugin, kubectl'
 
     - name: Get GKE Credentials
       run: |
