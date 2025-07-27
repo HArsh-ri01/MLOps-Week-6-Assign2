@@ -72,6 +72,7 @@ htmlcov/
 *.jpeg
 
 # Metrics and reports
+github-actions-key.txt
 metrics.json
 validation_results.json
 classification_report.txt
