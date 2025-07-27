@@ -142,12 +142,14 @@ jobs:
         credentials_json: ${{ secrets.GCP_SA_KEY }}
 
     - name: Setup Cloud SDK
+      id: setup-gcloud
       uses: google-github-actions/setup-gcloud@v2
       with:
         project_id: ${{ secrets.GCP_PROJECT_ID }}
 
     - name: Configure Docker for Artifact Registry
       run: |
+        export PATH="${{ steps.setup-gcloud.outputs.gcloud_path }}:$PATH"
         gcloud auth configure-docker ${{ env.ARTIFACT_REGISTRY }} --quiet
 
     - name: Build Docker Image
@@ -182,15 +184,14 @@ jobs:
         project_id: ${{ secrets.GCP_PROJECT_ID }}
         components: 'gke-gcloud-auth-plugin, kubectl'
     
-    - name: Add gcloud SDK to PATH
-      run: echo "$(dirname ${{ steps.setup-gcloud.outputs.gcloud_path }})" >> $GITHUB_PATH
-
     - name: Get GKE Credentials
       run: |
+        export PATH="$(dirname ${{ steps.setup-gcloud.outputs.gcloud_path }}):$PATH"
         gcloud container clusters get-credentials ${{ env.GKE_CLUSTER }} --zone ${{ env.GKE_ZONE }}
 
     - name: Deploy to Kubernetes
       run: |
+        export PATH="$(dirname ${{ steps.setup-gcloud.outputs.gcloud_path }}):$PATH"
         sed -i "s|IMAGE_URL|${{ env.ARTIFACT_REGISTRY }}/${{ env.PROJECT_ID }}/ml-models/${{ env.IMAGE }}:${{ github.sha }}|g" k8s/deployment.yaml
         kubectl apply -f k8s/deployment.yaml
         kubectl apply -f k8s/service.yaml
@@ -198,6 +199,7 @@ jobs:
 
     - name: Get Service Details
       run: |
+        export PATH="$(dirname ${{ steps.setup-gcloud.outputs.gcloud_path }}):$PATH"
         kubectl get service iris-api-service
         echo "API is accessible at:"
         kubectl get service iris-api-service -o jsonpath='{.status.loadBalancer.ingress[0].ip}'
@@ -229,20 +231,20 @@ jobs:
       with:
         project_id: ${{ secrets.GCP_PROJECT_ID }}
         components: 'gke-gcloud-auth-plugin, kubectl'
-    
-    - name: Add gcloud SDK to PATH
-      run: echo "$(dirname ${{ steps.setup-gcloud.outputs.gcloud_path }})" >> $GITHUB_PATH
 
     - name: Get GKE Credentials
       run: |
+        export PATH="$(dirname ${{ steps.setup-gcloud.outputs.gcloud_path }}):$PATH"
         gcloud container clusters get-credentials ${{ env.GKE_CLUSTER }} --zone ${{ env.GKE_ZONE }}
 
     - name: Wait for Service to be Ready
       run: |
+        export PATH="$(dirname ${{ steps.setup-gcloud.outputs.gcloud_path }}):$PATH"
         kubectl wait --for=condition=available --timeout=300s deployment/${{ env.DEPLOYMENT_NAME }}
 
     - name: Run Integration Tests
       run: |
+        export PATH="$(dirname ${{ steps.setup-gcloud.outputs.gcloud_path }}):$PATH"
         EXTERNAL_IP=$(kubectl get service iris-api-service -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
         while [ -z "$EXTERNAL_IP" ]; do
           echo "Waiting for external IP..."
@@ -264,6 +266,7 @@ jobs:
       env:
         REPO_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       run: |
+        export PATH="$(dirname ${{ steps.setup-gcloud.outputs.gcloud_path }}):$PATH"
         EXTERNAL_IP=$(kubectl get service iris-api-service -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
         echo "## 🚀 Deployment Successful!" >> deployment_report.md
         echo "" >> deployment_report.md
