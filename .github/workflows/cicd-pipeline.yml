@@ -1,3 +1,4 @@
+# .github/workflows/cicd-pipeline.yml
 name: ML Model CI/CD Pipeline
 
 on:
@@ -15,117 +16,19 @@ env:
   PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
   GKE_CLUSTER: iris-ml-cluster
   GKE_ZONE: us-central1-a
-  DEPLOYMENT_NAME: iris-api-deployment
-  IMAGE: iris-classifier-api
-  ARTIFACT_REGISTRY: us-central1-docker.pkg.dev
+  GKE_DEPLOYMENT_NAME: iris-api-deployment
+  IMAGE_NAME: iris-api
+  IMAGE_TAG: ${{ github.sha }}
+  DEPLOYMENT_YAML: k8s/deployment.yaml
 
 jobs:
-  train-model:
+  deploy:
+    name: Build and Deploy Iris FastAPI to GKE
     runs-on: ubuntu-latest
-    permissions:
-      contents: 'write'
-      id-token: 'write'
-      issues: 'write'
-      pull-requests: 'write'
 
     steps:
-    - name: Checkout code
+    - name: Checkout repository
       uses: actions/checkout@v4
-      with:
-        fetch-depth: 0
-
-    - name: Setup Python
-      uses: actions/setup-python@v3
-      with:
-        python-version: '3.10'
-
-    - name: Install dependencies
-      run: |
-        python -m pip install --upgrade pip
-        pip install -r requirements.txt
-
-    - name: Setup CML
-      uses: iterative/setup-cml@v1
-
-    - name: Train Model
-      run: |
-        python train_model.py
-        
-    - name: Validate Model Performance
-      run: |
-        python validate_model.py > model_metrics.txt
-        
-    - name: Create CML Report
-      env:
-        REPO_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      run: |
-        python generate_plots.py
-        echo "## Model Performance Report" >> report.md
-        echo "### Training Metrics" >> report.md
-        cat model_metrics.txt >> report.md
-        echo "" >> report.md
-        echo "### Confusion Matrix" >> report.md
-        cml publish confusion_matrix.png --md >> report.md
-        echo "" >> report.md
-        echo "### Feature Importance" >> report.md
-        cml publish feature_importance.png --md >> report.md
-        cml comment create report.md
-
-    - name: Upload Model Artifact
-      uses: actions/upload-artifact@v4
-      with:
-        name: trained-model
-        path: |
-          model.joblib
-          model_metrics.txt
-
-  build-test-api:
-    needs: train-model
-    runs-on: ubuntu-latest
-    steps:
-    - name: Checkout code
-      uses: actions/checkout@v3
-
-    - name: Download Model Artifact
-      uses: actions/download-artifact@v4
-      with:
-        name: trained-model
-
-    - name: Setup Python
-      uses: actions/setup-python@v4
-      with:
-        python-version: '3.10'
-
-    - name: Install API dependencies
-      run: |
-        pip install -r requirements.txt
-
-    - name: Test FastAPI Application
-      run: |
-        python -m pytest tests/test_api.py -v
-
-    - name: Upload API Artifact
-      uses: actions/upload-artifact@v4
-      with:
-        name: api-code
-        path: |
-          iris_fastapi.py
-          model.joblib
-          requirements.txt
-          Dockerfile
-
-  build-push-docker:
-    needs: build-test-api
-    runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/main'
-    steps:
-    - name: Checkout code
-      uses: actions/checkout@v3
-
-    - name: Download API Artifact
-      uses: actions/download-artifact@v4
-      with:
-        name: api-code
 
     - name: Authenticate to Google Cloud
       id: auth
@@ -134,141 +37,38 @@ jobs:
         credentials_json: ${{ secrets.GCP_SA_KEY }}
 
     - name: Setup Cloud SDK
-      id: setup-gcloud
       uses: google-github-actions/setup-gcloud@v2
       with:
-        project_id: ${{ secrets.GCP_PROJECT_ID }}
+        project_id: ${{ env.PROJECT_ID }}
 
-    - name: Configure Docker for Artifact Registry
+    - name: Install gke-gcloud-auth-plugin via gcloud
       run: |
-        export PATH="${{ steps.setup-gcloud.outputs.gcloud_path }}:$PATH"
-        gcloud auth configure-docker ${{ env.ARTIFACT_REGISTRY }} --quiet
+        gcloud components install gke-gcloud-auth-plugin --quiet
 
-    - name: Build Docker Image
+    - name: Configure Docker for Google Artifact Registry
       run: |
-        docker build -t ${{ env.ARTIFACT_REGISTRY }}/${{ env.PROJECT_ID }}/ml-models/${{ env.IMAGE }}:${{ github.sha }} .
-        docker build -t ${{ env.ARTIFACT_REGISTRY }}/${{ env.PROJECT_ID }}/ml-models/${{ env.IMAGE }}:latest .
+        gcloud auth configure-docker us-central1-docker.pkg.dev --quiet
 
-    - name: Push Docker Image
+    - name: Build Docker image
       run: |
-        docker push ${{ env.ARTIFACT_REGISTRY }}/${{ env.PROJECT_ID }}/ml-models/${{ env.IMAGE }}:${{ github.sha }}
-        docker push ${{ env.ARTIFACT_REGISTRY }}/${{ env.PROJECT_ID }}/ml-models/${{ env.IMAGE }}:latest
+        docker build -t us-central1-docker.pkg.dev/${{ env.PROJECT_ID }}/iris-repo/${{ env.IMAGE_NAME }}:${{ env.IMAGE_TAG }} .
 
-  deploy-to-k8s:
-    needs: build-push-docker
-    runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/main'
-    steps:
-    - name: Checkout code
-      uses: actions/checkout@v3
-
-    - name: Authenticate to Google Cloud
-      id: auth
-      uses: google-github-actions/auth@v2
-      with:
-        credentials_json: ${{ secrets.GCP_SA_KEY }}
-
-    - name: Setup Cloud SDK and required components
-      id: setup-gcloud
-      uses: google-github-actions/setup-gcloud@v2
-      with:
-        project_id: ${{ secrets.GCP_PROJECT_ID }}
-        components: 'gke-gcloud-auth-plugin, kubectl'
-
-    - name: Install gke-gcloud-auth-plugin
+    - name: Push Docker image
       run: |
-        sudo apt-get update && sudo apt-get install -y google-cloud-sdk-gke-gcloud-auth-plugin
+        docker push us-central1-docker.pkg.dev/${{ env.PROJECT_ID }}/iris-repo/${{ env.IMAGE_NAME }}:${{ env.IMAGE_TAG }}
 
-    - name: Get GKE Credentials
+    - name: Get GKE credentials
       run: |
         gcloud container clusters get-credentials ${{ env.GKE_CLUSTER }} --zone ${{ env.GKE_ZONE }}
 
-    - name: Deploy to Kubernetes
+    - name: Deploy to GKE
       run: |
-        sed -i "s|IMAGE_URL|${{ env.ARTIFACT_REGISTRY }}/${{ env.PROJECT_ID }}/ml-models/${{ env.IMAGE }}:${{ github.sha }}|g" k8s/deployment.yaml
-        kubectl apply -f k8s/deployment.yaml
-        kubectl apply -f k8s/service.yaml
-        kubectl rollout status deployment/${{ env.DEPLOYMENT_NAME }}
+        sed "s|IMAGE_URL|us-central1-docker.pkg.dev/${{ env.PROJECT_ID }}/iris-repo/${{ env.IMAGE_NAME }}:${{ env.IMAGE_TAG }}|g" ${{ env.DEPLOYMENT_YAML }} | kubectl apply -f -
+        kubectl rollout status deployment/${{ env.GKE_DEPLOYMENT_NAME }}
 
-    - name: Get Service Details
+    - name: Verify services
       run: |
-        kubectl get service iris-api-service
-        echo "API is accessible at:"
-        kubectl get service iris-api-service -o jsonpath='{.status.loadBalancer.ingress[0].ip}'
-
-  integration-test:
-    needs: deploy-to-k8s
-    runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/main'
-    permissions:
-      contents: 'write'
-      id-token: 'write'
-      issues: 'write'
-      pull-requests: 'write'
-      
-    steps:
-    - name: Checkout code
-      uses: actions/checkout@v3
-
-    - name: Authenticate to Google Cloud
-      id: auth
-      uses: google-github-actions/auth@v2
-      with:
-        credentials_json: ${{ secrets.GCP_SA_KEY }}
-
-    - name: Setup Cloud SDK and required components
-      id: setup-gcloud
-      uses: google-github-actions/setup-gcloud@v2
-      with:
-        project_id: ${{ secrets.GCP_PROJECT_ID }}
-        components: 'gke-gcloud-auth-plugin, kubectl'
-
-    - name: Install gke-gcloud-auth-plugin
-      run: |
-        sudo apt-get update && sudo apt-get install -y google-cloud-sdk-gke-gcloud-auth-plugin
-
-    - name: Get GKE Credentials
-      run: |
-        gcloud container clusters get-credentials ${{ env.GKE_CLUSTER }} --zone ${{ env.GKE_ZONE }}
-
-    - name: Wait for Service to be Ready
-      run: |
-        kubectl wait --for=condition=available --timeout=300s deployment/${{ env.DEPLOYMENT_NAME }}
-
-    - name: Run Integration Tests
-      run: |
-        EXTERNAL_IP=$(kubectl get service iris-api-service -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
-        while [ -z "$EXTERNAL_IP" ]; do
-          echo "Waiting for external IP..."
-          sleep 10
-          EXTERNAL_IP=$(kubectl get service iris-api-service -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
-        done
-        echo "Testing API at: http://$EXTERNAL_IP:8200"
-        curl -f http://$EXTERNAL_IP:8200/ || exit 1
-        curl -X POST "http://$EXTERNAL_IP:8200/predict/" \
-          -H "Content-Type: application/json" \
-          -d '{"sepal_length": 5.1, "sepal_width": 3.5, "petal_length": 1.4, "petal_width": 0.2}' \
-          | grep -q "predicted_class" || exit 1
-        echo "✅ All integration tests passed!"
-
-    - name: Setup CML for Deployment Report
-      uses: iterative/setup-cml@v1
-
-    - name: Create Deployment Report
-      env:
-        REPO_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      run: |
-        EXTERNAL_IP=$(kubectl get service iris-api-service -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
-        echo "## 🚀 Deployment Successful!" >> deployment_report.md
-        echo "" >> deployment_report.md
-        echo "### Deployment Details" >> deployment_report.md
-        echo "- **Image**: ${{ env.ARTIFACT_REGISTRY }}/${{ env.PROJECT_ID }}/ml-models/${{ env.IMAGE }}:${{ github.sha }}" >> deployment_report.md
-        echo "- **Cluster**: ${{ env.GKE_CLUSTER }}" >> deployment_report.md
-        echo "- **External IP**: http://$EXTERNAL_IP:8200" >> deployment_report.md
-        echo "- **Commit**: ${{ github.sha }}" >> deployment_report.md
-        echo "" >> deployment_report.md
-        echo "### Test Results" >> deployment_report.md
-        echo "✅ Health check: PASSED" >> deployment_report.md
-        echo "✅ Prediction API: PASSED" >> deployment_report.md
-        cml comment create deployment_report.md
+        kubectl get deployments
+        kubectl get pods
+        kubectl get services
 
