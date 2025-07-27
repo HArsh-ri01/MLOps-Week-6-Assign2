@@ -173,19 +173,15 @@ jobs:
       with:
         credentials_json: ${{ secrets.GCP_SA_KEY }}
 
-    - name: Setup Cloud SDK
+    - name: Setup Cloud SDK and GKE Auth Plugin
       uses: google-github-actions/setup-gcloud@v2
       with:
         project_id: ${{ secrets.GCP_PROJECT_ID }}
+        components: 'gke-gcloud-auth-plugin'
 
     - name: Get GKE Credentials
       run: |
         gcloud container clusters get-credentials ${{ env.GKE_CLUSTER }} --zone ${{ env.GKE_ZONE }}
-
-    - name: Install gke-gcloud-auth-plugin
-      run: |
-        sudo apt-get update
-        sudo apt-get install -y google-cloud-sdk-gke-gcloud-auth-plugin
 
     - name: Deploy to Kubernetes
       run: |
