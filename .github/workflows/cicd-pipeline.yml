@@ -121,7 +121,7 @@ jobs:
           requirements.txt
           Dockerfile
   # Stage 3: Build and Push Docker Image
-    build-push-docker:
+  build-push-docker:
     needs: build-test-api
     runs-on: ubuntu-latest
     if: github.ref == 'refs/heads/main'
