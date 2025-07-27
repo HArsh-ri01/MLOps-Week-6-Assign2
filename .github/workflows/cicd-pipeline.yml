@@ -1,4 +1,3 @@
-# .github/workflows/cicd-pipeline.yml
 name: ML Model CI/CD Pipeline
 
 on:
@@ -21,7 +20,6 @@ env:
   ARTIFACT_REGISTRY: us-central1-docker.pkg.dev
 
 jobs:
-  # Stage 1: Model Training and Validation
   train-model:
     runs-on: ubuntu-latest
     permissions:
@@ -61,10 +59,7 @@ jobs:
       env:
         REPO_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       run: |
-        # Generate model performance plots
         python generate_plots.py
-        
-        # Create CML report
         echo "## Model Performance Report" >> report.md
         echo "### Training Metrics" >> report.md
         cat model_metrics.txt >> report.md
@@ -74,7 +69,6 @@ jobs:
         echo "" >> report.md
         echo "### Feature Importance" >> report.md
         cml publish feature_importance.png --md >> report.md
-        
         cml comment create report.md
 
     - name: Upload Model Artifact
@@ -85,7 +79,6 @@ jobs:
           model.joblib
           model_metrics.txt
 
-  # Stage 2: Build and Test API
   build-test-api:
     needs: train-model
     runs-on: ubuntu-latest
@@ -120,8 +113,7 @@ jobs:
           model.joblib
           requirements.txt
           Dockerfile
-          
-  # Stage 3: Build and Push Docker Image
+
   build-push-docker:
     needs: build-test-api
     runs-on: ubuntu-latest
@@ -148,10 +140,9 @@ jobs:
         project_id: ${{ secrets.GCP_PROJECT_ID }}
 
     - name: Configure Docker for Artifact Registry
-      env:
-        GCLOUD_SDK_PATH: ${{ steps.setup-gcloud.outputs.gcloud_path }}
       run: |
-        "$GCLOUD_SDK_PATH" auth configure-docker ${{ env.ARTIFACT_REGISTRY }} --quiet
+        export PATH="${{ steps.setup-gcloud.outputs.gcloud_path }}:$PATH"
+        gcloud auth configure-docker ${{ env.ARTIFACT_REGISTRY }} --quiet
 
     - name: Build Docker Image
       run: |
@@ -163,7 +154,6 @@ jobs:
         docker push ${{ env.ARTIFACT_REGISTRY }}/${{ env.PROJECT_ID }}/ml-models/${{ env.IMAGE }}:${{ github.sha }}
         docker push ${{ env.ARTIFACT_REGISTRY }}/${{ env.PROJECT_ID }}/ml-models/${{ env.IMAGE }}:latest
 
-  # Stage 4: Deploy to Kubernetes
   deploy-to-k8s:
     needs: build-push-docker
     runs-on: ubuntu-latest
@@ -184,33 +174,28 @@ jobs:
       with:
         project_id: ${{ secrets.GCP_PROJECT_ID }}
         components: 'gke-gcloud-auth-plugin, kubectl'
-    
-    - name: Get GKE Credentials
-      env:
-        GCLOUD_SDK_PATH: ${{ steps.setup-gcloud.outputs.gcloud_path }}
+
+    - name: Install gke-gcloud-auth-plugin
       run: |
-        "$GCLOUD_SDK_PATH" container clusters get-credentials ${{ env.GKE_CLUSTER }} --zone ${{ env.GKE_ZONE }}
+        sudo apt-get update && sudo apt-get install -y google-cloud-sdk-gke-gcloud-auth-plugin
+
+    - name: Get GKE Credentials
+      run: |
+        gcloud container clusters get-credentials ${{ env.GKE_CLUSTER }} --zone ${{ env.GKE_ZONE }}
 
     - name: Deploy to Kubernetes
-      env:
-        GCLOUD_SDK_PATH: ${{ steps.setup-gcloud.outputs.gcloud_path }}
       run: |
-        KUBECTL_PATH="$(dirname "$GCLOUD_SDK_PATH")/kubectl"
         sed -i "s|IMAGE_URL|${{ env.ARTIFACT_REGISTRY }}/${{ env.PROJECT_ID }}/ml-models/${{ env.IMAGE }}:${{ github.sha }}|g" k8s/deployment.yaml
-        "$KUBECTL_PATH" apply -f k8s/deployment.yaml
-        "$KUBECTL_PATH" apply -f k8s/service.yaml
-        "$KUBECTL_PATH" rollout status deployment/${{ env.DEPLOYMENT_NAME }}
+        kubectl apply -f k8s/deployment.yaml
+        kubectl apply -f k8s/service.yaml
+        kubectl rollout status deployment/${{ env.DEPLOYMENT_NAME }}
 
     - name: Get Service Details
-      env:
-        GCLOUD_SDK_PATH: ${{ steps.setup-gcloud.outputs.gcloud_path }}
       run: |
-        KUBECTL_PATH="$(dirname "$GCLOUD_SDK_PATH")/kubectl"
-        "$KUBECTL_PATH" get service iris-api-service
+        kubectl get service iris-api-service
         echo "API is accessible at:"
-        "$KUBECTL_PATH" get service iris-api-service -o jsonpath='{.status.loadBalancer.ingress[0].ip}'
+        kubectl get service iris-api-service -o jsonpath='{.status.loadBalancer.ingress[0].ip}'
 
-  # Stage 5: Post-Deployment Testing
   integration-test:
     needs: deploy-to-k8s
     runs-on: ubuntu-latest
@@ -238,29 +223,25 @@ jobs:
         project_id: ${{ secrets.GCP_PROJECT_ID }}
         components: 'gke-gcloud-auth-plugin, kubectl'
 
-    - name: Get GKE Credentials
-      env:
-        GCLOUD_SDK_PATH: ${{ steps.setup-gcloud.outputs.gcloud_path }}
+    - name: Install gke-gcloud-auth-plugin
       run: |
-        "$GCLOUD_SDK_PATH" container clusters get-credentials ${{ env.GKE_CLUSTER }} --zone ${{ env.GKE_ZONE }}
+        sudo apt-get update && sudo apt-get install -y google-cloud-sdk-gke-gcloud-auth-plugin
+
+    - name: Get GKE Credentials
+      run: |
+        gcloud container clusters get-credentials ${{ env.GKE_CLUSTER }} --zone ${{ env.GKE_ZONE }}
 
     - name: Wait for Service to be Ready
-      env:
-        GCLOUD_SDK_PATH: ${{ steps.setup-gcloud.outputs.gcloud_path }}
       run: |
-        KUBECTL_PATH="$(dirname "$GCLOUD_SDK_PATH")/kubectl"
-        "$KUBECTL_PATH" wait --for=condition=available --timeout=300s deployment/${{ env.DEPLOYMENT_NAME }}
+        kubectl wait --for=condition=available --timeout=300s deployment/${{ env.DEPLOYMENT_NAME }}
 
     - name: Run Integration Tests
-      env:
-        GCLOUD_SDK_PATH: ${{ steps.setup-gcloud.outputs.gcloud_path }}
       run: |
-        KUBECTL_PATH="$(dirname "$GCLOUD_SDK_PATH")/kubectl"
-        EXTERNAL_IP=$("$KUBECTL_PATH" get service iris-api-service -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
+        EXTERNAL_IP=$(kubectl get service iris-api-service -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
         while [ -z "$EXTERNAL_IP" ]; do
           echo "Waiting for external IP..."
           sleep 10
-          EXTERNAL_IP=$("$KUBECTL_PATH" get service iris-api-service -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
+          EXTERNAL_IP=$(kubectl get service iris-api-service -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
         done
         echo "Testing API at: http://$EXTERNAL_IP:8200"
         curl -f http://$EXTERNAL_IP:8200/ || exit 1
@@ -275,11 +256,9 @@ jobs:
 
     - name: Create Deployment Report
       env:
-        GCLOUD_SDK_PATH: ${{ steps.setup-gcloud.outputs.gcloud_path }}
         REPO_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       run: |
-        KUBECTL_PATH="$(dirname "$GCLOUD_SDK_PATH")/kubectl"
-        EXTERNAL_IP=$("$KUBECTL_PATH" get service iris-api-service -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
+        EXTERNAL_IP=$(kubectl get service iris-api-service -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
         echo "## 🚀 Deployment Successful!" >> deployment_report.md
         echo "" >> deployment_report.md
         echo "### Deployment Details" >> deployment_report.md
@@ -292,3 +271,4 @@ jobs:
         echo "✅ Health check: PASSED" >> deployment_report.md
         echo "✅ Prediction API: PASSED" >> deployment_report.md
         cml comment create deployment_report.md
+

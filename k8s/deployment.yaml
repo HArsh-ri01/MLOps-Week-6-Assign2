@@ -20,6 +20,7 @@ spec:
       containers:
       - name: iris-api
         image: IMAGE_URL  # This will be replaced by CI/CD pipeline
+        imagePullPolicy: Always
         ports:
         - containerPort: 8200
           name: http
@@ -51,7 +52,6 @@ spec:
           periodSeconds: 5
           timeoutSeconds: 3
           failureThreshold: 3
-        # Health check endpoint for more detailed monitoring
         startupProbe:
           httpGet:
             path: /
@@ -60,13 +60,11 @@ spec:
           periodSeconds: 10
           timeoutSeconds: 5
           failureThreshold: 10
-      # Add security context for better security
       securityContext:
         runAsNonRoot: true
         runAsUser: 1000
         fsGroup: 2000
-      # Add image pull policy
-      imagePullPolicy: Always
+      terminationGracePeriodSeconds: 30
 ---
 # HorizontalPodAutoscaler for automatic scaling
 apiVersion: autoscaling/v2
@@ -93,3 +91,4 @@ spec:
       target:
         type: Utilization
         averageUtilization: 80
+
