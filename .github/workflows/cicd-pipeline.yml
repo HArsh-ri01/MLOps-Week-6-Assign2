@@ -158,12 +158,12 @@ jobs:
         docker push ${{ env.ARTIFACT_REGISTRY }}/${{ env.PROJECT_ID }}/ml-models/${{ env.IMAGE }}:${{ github.sha }}
         docker push ${{ env.ARTIFACT_REGISTRY }}/${{ env.PROJECT_ID }}/ml-models/${{ env.IMAGE }}:latest
 
-# Stage 4: Deploy to Kubernetes
-deploy-to-k8s:
-  needs: build-push-docker
-  runs-on: ubuntu-latest
-  if: github.ref == 'refs/heads/main'
-  steps:
+  # Stage 4: Deploy to Kubernetes
+  deploy-to-k8s:
+    needs: build-push-docker
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main'
+    steps:
     - name: Checkout code
       uses: actions/checkout@v3
 
@@ -194,18 +194,18 @@ deploy-to-k8s:
         echo "API is accessible at:"
         kubectl get service iris-api-service -o jsonpath='{.status.loadBalancer.ingress[0].ip}'
 
-# Stage 5: Post-Deployment Testing
-integration-test:
-  needs: deploy-to-k8s
-  runs-on: ubuntu-latest
-  permissions:
-    contents: 'write'
-    id-token: 'write'
-    issues: 'write'
-    pull-requests: 'write'
+  # Stage 5: Post-Deployment Testing
+  integration-test:
+    needs: deploy-to-k8s
+    runs-on: ubuntu-latest
+    permissions:
+      contents: 'write'
+      id-token: 'write'
+      issues: 'write'
+      pull-requests: 'write'
 
-  if: github.ref == 'refs/heads/main'
-  steps:
+    if: github.ref == 'refs/heads/main'
+    steps:
     - name: Checkout code
       uses: actions/checkout@v3
 
