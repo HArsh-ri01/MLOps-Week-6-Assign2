@@ -120,6 +120,7 @@ jobs:
           model.joblib
           requirements.txt
           Dockerfile
+          
   # Stage 3: Build and Push Docker Image
   build-push-docker:
     needs: build-test-api
@@ -135,12 +136,12 @@ jobs:
         name: api-code
 
     - name: Authenticate to Google Cloud
-      uses: google-github-actions/auth@v1
+      uses: google-github-actions/auth@v2
       with:
         credentials_json: ${{ secrets.GCP_SA_KEY }}
 
     - name: Setup Cloud SDK
-      uses: google-github-actions/setup-gcloud@v1
+      uses: google-github-actions/setup-gcloud@v2
       with:
         project_id: ${{ secrets.GCP_PROJECT_ID }}
 
@@ -168,12 +169,12 @@ jobs:
       uses: actions/checkout@v3
 
     - name: Authenticate to Google Cloud
-      uses: google-github-actions/auth@v1
+      uses: google-github-actions/auth@v2
       with:
         credentials_json: ${{ secrets.GCP_SA_KEY }}
 
     - name: Setup Cloud SDK
-      uses: google-github-actions/setup-gcloud@v1
+      uses: google-github-actions/setup-gcloud@v2
       with:
         project_id: ${{ secrets.GCP_PROJECT_ID }}
 
@@ -198,24 +199,24 @@ jobs:
   integration-test:
     needs: deploy-to-k8s
     runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main'
     permissions:
       contents: 'write'
       id-token: 'write'
       issues: 'write'
       pull-requests: 'write'
-
-    if: github.ref == 'refs/heads/main'
+      
     steps:
     - name: Checkout code
       uses: actions/checkout@v3
 
     - name: Authenticate to Google Cloud
-      uses: google-github-actions/auth@v1
+      uses: google-github-actions/auth@v2
       with:
         credentials_json: ${{ secrets.GCP_SA_KEY }}
 
     - name: Setup Cloud SDK
-      uses: google-github-actions/setup-gcloud@v1
+      uses: google-github-actions/setup-gcloud@v2
       with:
         project_id: ${{ secrets.GCP_PROJECT_ID }}
 
@@ -263,4 +264,3 @@ jobs:
         echo "✅ Health check: PASSED" >> deployment_report.md
         echo "✅ Prediction API: PASSED" >> deployment_report.md
         cml comment create deployment_report.md
-
