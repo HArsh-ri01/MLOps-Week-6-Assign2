@@ -120,13 +120,12 @@ jobs:
           model.joblib
           requirements.txt
           Dockerfile
-
-    # Stage 3: Build and Push Docker Image
-build-push-docker:
-  needs: build-test-api
-  runs-on: ubuntu-latest
-  if: github.ref == 'refs/heads/main'
-  steps:
+  # Stage 3: Build and Push Docker Image
+    build-push-docker:
+    needs: build-test-api
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main'
+    steps:
     - name: Checkout code
       uses: actions/checkout@v3
 
@@ -136,12 +135,12 @@ build-push-docker:
         name: api-code
 
     - name: Authenticate to Google Cloud
-      uses: google-github-actions/auth@v2
+      uses: google-github-actions/auth@v1
       with:
         credentials_json: ${{ secrets.GCP_SA_KEY }}
 
     - name: Setup Cloud SDK
-      uses: google-github-actions/setup-gcloud@v2
+      uses: google-github-actions/setup-gcloud@v1
       with:
         project_id: ${{ secrets.GCP_PROJECT_ID }}
 
@@ -169,12 +168,12 @@ deploy-to-k8s:
       uses: actions/checkout@v3
 
     - name: Authenticate to Google Cloud
-      uses: google-github-actions/auth@v2
+      uses: google-github-actions/auth@v1
       with:
         credentials_json: ${{ secrets.GCP_SA_KEY }}
 
     - name: Setup Cloud SDK
-      uses: google-github-actions/setup-gcloud@v2
+      uses: google-github-actions/setup-gcloud@v1
       with:
         project_id: ${{ secrets.GCP_PROJECT_ID }}
 
@@ -211,12 +210,12 @@ integration-test:
       uses: actions/checkout@v3
 
     - name: Authenticate to Google Cloud
-      uses: google-github-actions/auth@v2
+      uses: google-github-actions/auth@v1
       with:
         credentials_json: ${{ secrets.GCP_SA_KEY }}
 
     - name: Setup Cloud SDK
-      uses: google-github-actions/setup-gcloud@v2
+      uses: google-github-actions/setup-gcloud@v1
       with:
         project_id: ${{ secrets.GCP_PROJECT_ID }}
 
