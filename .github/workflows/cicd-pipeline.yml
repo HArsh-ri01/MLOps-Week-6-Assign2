@@ -189,19 +189,23 @@ jobs:
         gcloud container clusters get-credentials ${{ env.GKE_CLUSTER }} --zone ${{ env.GKE_ZONE }}
 
     - name: Deploy to Kubernetes
+      env:
+        GCLOUD_SDK_PATH: ${{ steps.setup-gcloud.outputs.gcloud_path }}
       run: |
-        KUBECTL_PATH=$(dirname ${{ steps.setup-gcloud.outputs.gcloud_path }})
+        KUBECTL_PATH="$(dirname "$GCLOUD_SDK_PATH")"
         sed -i "s|IMAGE_URL|${{ env.ARTIFACT_REGISTRY }}/${{ env.PROJECT_ID }}/ml-models/${{ env.IMAGE }}:${{ github.sha }}|g" k8s/deployment.yaml
-        ${KUBECTL_PATH}/kubectl apply -f k8s/deployment.yaml
-        ${KUBECTL_PATH}/kubectl apply -f k8s/service.yaml
-        ${KUBECTL_PATH}/kubectl rollout status deployment/${{ env.DEPLOYMENT_NAME }}
+        "$KUBECTL_PATH/kubectl" apply -f k8s/deployment.yaml
+        "$KUBECTL_PATH/kubectl" apply -f k8s/service.yaml
+        "$KUBECTL_PATH/kubectl" rollout status deployment/${{ env.DEPLOYMENT_NAME }}
 
     - name: Get Service Details
+      env:
+        GCLOUD_SDK_PATH: ${{ steps.setup-gcloud.outputs.gcloud_path }}
       run: |
-        KUBECTL_PATH=$(dirname ${{ steps.setup-gcloud.outputs.gcloud_path }})
-        ${KUBECTL_PATH}/kubectl get service iris-api-service
+        KUBECTL_PATH="$(dirname "$GCLOUD_SDK_PATH")"
+        "$KUBECTL_PATH/kubectl" get service iris-api-service
         echo "API is accessible at:"
-        ${KUBECTL_PATH}/kubectl get service iris-api-service -o jsonpath='{.status.loadBalancer.ingress[0].ip}'
+        "$KUBECTL_PATH/kubectl" get service iris-api-service -o jsonpath='{.status.loadBalancer.ingress[0].ip}'
 
   # Stage 5: Post-Deployment Testing
   integration-test:
@@ -238,18 +242,22 @@ jobs:
         gcloud container clusters get-credentials ${{ env.GKE_CLUSTER }} --zone ${{ env.GKE_ZONE }}
 
     - name: Wait for Service to be Ready
+      env:
+        GCLOUD_SDK_PATH: ${{ steps.setup-gcloud.outputs.gcloud_path }}
       run: |
-        KUBECTL_PATH=$(dirname ${{ steps.setup-gcloud.outputs.gcloud_path }})
-        ${KUBECTL_PATH}/kubectl wait --for=condition=available --timeout=300s deployment/${{ env.DEPLOYMENT_NAME }}
+        KUBECTL_PATH="$(dirname "$GCLOUD_SDK_PATH")"
+        "$KUBECTL_PATH/kubectl" wait --for=condition=available --timeout=300s deployment/${{ env.DEPLOYMENT_NAME }}
 
     - name: Run Integration Tests
+      env:
+        GCLOUD_SDK_PATH: ${{ steps.setup-gcloud.outputs.gcloud_path }}
       run: |
-        KUBECTL_PATH=$(dirname ${{ steps.setup-gcloud.outputs.gcloud_path }})
-        EXTERNAL_IP=$(${KUBECTL_PATH}/kubectl get service iris-api-service -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
+        KUBECTL_PATH="$(dirname "$GCLOUD_SDK_PATH")"
+        EXTERNAL_IP=$("$KUBECTL_PATH/kubectl" get service iris-api-service -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
         while [ -z "$EXTERNAL_IP" ]; do
           echo "Waiting for external IP..."
           sleep 10
-          EXTERNAL_IP=$(${KUBECTL_PATH}/kubectl get service iris-api-service -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
+          EXTERNAL_IP=$("$KUBECTL_PATH/kubectl" get service iris-api-service -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
         done
         echo "Testing API at: http://$EXTERNAL_IP:8200"
         curl -f http://$EXTERNAL_IP:8200/ || exit 1
@@ -265,9 +273,10 @@ jobs:
     - name: Create Deployment Report
       env:
         REPO_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        GCLOUD_SDK_PATH: ${{ steps.setup-gcloud.outputs.gcloud_path }}
       run: |
-        KUBECTL_PATH=$(dirname ${{ steps.setup-gcloud.outputs.gcloud_path }})
-        EXTERNAL_IP=$(${KUBECTL_PATH}/kubectl get service iris-api-service -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
+        KUBECTL_PATH="$(dirname "$GCLOUD_SDK_PATH")"
+        EXTERNAL_IP=$("$KUBECTL_PATH/kubectl" get service iris-api-service -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
         echo "## 🚀 Deployment Successful!" >> deployment_report.md
         echo "" >> deployment_report.md
         echo "### Deployment Details" >> deployment_report.md
