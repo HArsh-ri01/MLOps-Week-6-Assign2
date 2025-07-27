@@ -122,11 +122,11 @@ jobs:
           Dockerfile
 
     # Stage 3: Build and Push Docker Image
-  build-push-docker:
-    needs: build-test-api
-    runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/main'
-    steps:
+build-push-docker:
+  needs: build-test-api
+  runs-on: ubuntu-latest
+  if: github.ref == 'refs/heads/main'
+  steps:
     - name: Checkout code
       uses: actions/checkout@v3
 
@@ -135,20 +135,18 @@ jobs:
       with:
         name: api-code
 
-    - name: Decode GCP credentials
-      run: |
-        echo "${{ secrets.GCP_SA_KEY }}" | base64 --decode > "${{ github.workspace }}/gcp-key.json"
+    - name: Authenticate to Google Cloud
+      uses: google-github-actions/auth@v2
+      with:
+        credentials_json: ${{ secrets.GCP_SA_KEY }}
 
     - name: Setup Cloud SDK
-      uses: google-github-actions/setup-gcloud@v1
+      uses: google-github-actions/setup-gcloud@v2
       with:
         project_id: ${{ secrets.GCP_PROJECT_ID }}
-        service_account_key: ${{ github.workspace }}/gcp-key.json
-        export_default_credentials: true
 
     - name: Configure Docker for Artifact Registry
       run: |
-        gcloud auth activate-service-account --key-file="${{ github.workspace }}/gcp-key.json"
         gcloud auth configure-docker ${{ env.ARTIFACT_REGISTRY }} --quiet
 
     - name: Build Docker Image
@@ -161,25 +159,24 @@ jobs:
         docker push ${{ env.ARTIFACT_REGISTRY }}/${{ env.PROJECT_ID }}/ml-models/${{ env.IMAGE }}:${{ github.sha }}
         docker push ${{ env.ARTIFACT_REGISTRY }}/${{ env.PROJECT_ID }}/ml-models/${{ env.IMAGE }}:latest
 
-  # Stage 4: Deploy to Kubernetes
-  deploy-to-k8s:
-    needs: build-push-docker
-    runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/main'
-    steps:
+# Stage 4: Deploy to Kubernetes
+deploy-to-k8s:
+  needs: build-push-docker
+  runs-on: ubuntu-latest
+  if: github.ref == 'refs/heads/main'
+  steps:
     - name: Checkout code
       uses: actions/checkout@v3
 
-    - name: Decode GCP credentials
-      run: |
-        echo "${{ secrets.GCP_SA_KEY }}" | base64 --decode > "${{ github.workspace }}/gcp-key.json"
+    - name: Authenticate to Google Cloud
+      uses: google-github-actions/auth@v2
+      with:
+        credentials_json: ${{ secrets.GCP_SA_KEY }}
 
     - name: Setup Cloud SDK
-      uses: google-github-actions/setup-gcloud@v1
+      uses: google-github-actions/setup-gcloud@v2
       with:
         project_id: ${{ secrets.GCP_PROJECT_ID }}
-        service_account_key: ${{ github.workspace }}/gcp-key.json
-        export_default_credentials: true
 
     - name: Get GKE Credentials
       run: |
@@ -198,31 +195,30 @@ jobs:
         echo "API is accessible at:"
         kubectl get service iris-api-service -o jsonpath='{.status.loadBalancer.ingress[0].ip}'
 
-  # Stage 5: Post-Deployment Testing
-  integration-test:
-    needs: deploy-to-k8s
-    runs-on: ubuntu-latest
-    permissions:
-      contents: 'write'
-      id-token: 'write'
-      issues: 'write'
-      pull-requests: 'write'
+# Stage 5: Post-Deployment Testing
+integration-test:
+  needs: deploy-to-k8s
+  runs-on: ubuntu-latest
+  permissions:
+    contents: 'write'
+    id-token: 'write'
+    issues: 'write'
+    pull-requests: 'write'
 
-    if: github.ref == 'refs/heads/main'
-    steps:
+  if: github.ref == 'refs/heads/main'
+  steps:
     - name: Checkout code
       uses: actions/checkout@v3
 
-    - name: Decode GCP credentials
-      run: |
-        echo "${{ secrets.GCP_SA_KEY }}" | base64 --decode > "${{ github.workspace }}/gcp-key.json"
+    - name: Authenticate to Google Cloud
+      uses: google-github-actions/auth@v2
+      with:
+        credentials_json: ${{ secrets.GCP_SA_KEY }}
 
     - name: Setup Cloud SDK
-      uses: google-github-actions/setup-gcloud@v1
+      uses: google-github-actions/setup-gcloud@v2
       with:
         project_id: ${{ secrets.GCP_PROJECT_ID }}
-        service_account_key: ${{ github.workspace }}/gcp-key.json
-        export_default_credentials: true
 
     - name: Get GKE Credentials
       run: |
@@ -268,5 +264,4 @@ jobs:
         echo "✅ Health check: PASSED" >> deployment_report.md
         echo "✅ Prediction API: PASSED" >> deployment_report.md
         cml comment create deployment_report.md
-
 
