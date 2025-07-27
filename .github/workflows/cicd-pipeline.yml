@@ -141,6 +141,7 @@ jobs:
         credentials_json: ${{ secrets.GCP_SA_KEY }}
 
     - name: Setup Cloud SDK
+      id: setup-gcloud
       uses: google-github-actions/setup-gcloud@v2
       with:
         project_id: ${{ secrets.GCP_PROJECT_ID }}
@@ -174,16 +175,16 @@ jobs:
         credentials_json: ${{ secrets.GCP_SA_KEY }}
 
     - name: Setup Cloud SDK and required components
+      id: setup-gcloud
       uses: google-github-actions/setup-gcloud@v2
       with:
         project_id: ${{ secrets.GCP_PROJECT_ID }}
         components: 'gke-gcloud-auth-plugin, kubectl'
     
-    - name: Remove conflicting kubectl and Get GKE Credentials
+    - name: Get GKE Credentials
       env:
         USE_GKE_GCLOUD_AUTH_PLUGIN: "True"
       run: |
-        sudo rm /usr/bin/kubectl || true
         gcloud container clusters get-credentials ${{ env.GKE_CLUSTER }} --zone ${{ env.GKE_ZONE }}
 
     - name: Deploy to Kubernetes
@@ -220,16 +221,16 @@ jobs:
         credentials_json: ${{ secrets.GCP_SA_KEY }}
 
     - name: Setup Cloud SDK and required components
+      id: setup-gcloud
       uses: google-github-actions/setup-gcloud@v2
       with:
         project_id: ${{ secrets.GCP_PROJECT_ID }}
         components: 'gke-gcloud-auth-plugin, kubectl'
 
-    - name: Remove conflicting kubectl and Get GKE Credentials
+    - name: Get GKE Credentials
       env:
         USE_GKE_GCLOUD_AUTH_PLUGIN: "True"
       run: |
-        sudo rm /usr/bin/kubectl || true
         gcloud container clusters get-credentials ${{ env.GKE_CLUSTER }} --zone ${{ env.GKE_ZONE }}
 
     - name: Wait for Service to be Ready
